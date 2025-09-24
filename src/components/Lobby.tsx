@@ -29,7 +29,7 @@ const Lobby: React.FC<LobbyProps> = ({ currentLevel, gridSize, onPlayClick, onGr
           
           {currentLevel > 1 && (
             <p className="text-sm text-gray-500">
-              You've completed {currentLevel - 1} level{currentLevel > 2 ? 's' : ''}!
+              You&apos;ve completed {currentLevel - 1} level{currentLevel > 2 ? 's' : ''}!
             </p>
           )}
         </div>

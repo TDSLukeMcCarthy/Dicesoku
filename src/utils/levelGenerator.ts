@@ -120,7 +120,7 @@ export function isValidPlacement(
   targets: { rows: number[]; cols: number[] },
   row: number,
   col: number,
-  dice: DiceValue
+  _dice: DiceValue
 ): boolean {
   // Only check if the cell is available (not blocked and empty)
   return !blocked[row][col] && grid[row][col] === null;

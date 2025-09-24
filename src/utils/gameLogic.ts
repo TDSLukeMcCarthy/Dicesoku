@@ -1,10 +1,10 @@
-import { GameState, DiceValue, ValidationResult, RunningTotals } from '@/types/game';
+import { GameState, DiceValue, ValidationResult, RunningTotals, Level } from '@/types/game';
 import { calculateRunningTotals, isValidPlacement } from './levelGenerator';
 
 /**
  * Creates initial game state from a level
  */
-export function createGameState(level: any, currentLevel: number, gridSize: number): GameState {
+export function createGameState(level: Level, currentLevel: number, gridSize: number): GameState {
   const grid: (DiceValue | null)[][] = Array(level.size)
     .fill(null)
     .map(() => Array(level.size).fill(null));
@@ -125,7 +125,7 @@ export function undoLastMove(gameState: GameState): GameState {
  */
 export function validateGame(
   grid: (DiceValue | null)[][],
-  level: any
+  level: Level
 ): ValidationResult {
   const runningTotals = calculateRunningTotals(grid);
   const exceededRows: number[] = [];

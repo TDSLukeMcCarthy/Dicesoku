@@ -44,7 +44,7 @@ const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) =>
         }
       }
     }
-  }, [gameState?.gameStatus, gameState?.dicePool, gameState?.grid, onGameComplete]);
+  }, [gameState, onGameComplete]);
 
   if (!gameState) {
     return (
@@ -149,7 +149,7 @@ const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) =>
           <div className="text-sm text-blue-700 space-y-1">
             <p>1. Select a dice from the pool or drag it to the grid</p>
             <p>2. Click on an empty cell or drop the dice to place it</p>
-            <p>3. You can go over target sums (they'll show in red)</p>
+            <p>3. You can go over target sums (they&apos;ll show in red)</p>
             <p>4. Win by matching all targets exactly with all dice used</p>
             <p>5. Use undo wisely - you only get 5 per level!</p>
           </div>
