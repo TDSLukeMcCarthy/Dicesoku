@@ -27,7 +27,7 @@ export function generateLevel(size: number = 5): Level {
 function generateBlockedCells(size: number): boolean[][] {
   const blocked: boolean[][] = Array(size).fill(null).map(() => Array(size).fill(false));
   const totalCells = size * size;
-  const blockedCount = Math.floor(totalCells * (0.1 + Math.random() * 0.1)); // 10-20%
+  const blockedCount = Math.floor(totalCells * (0.3 + Math.random() * 0.2)); // 30-50%
   
   // Randomly place blocked cells
   let placed = 0;
