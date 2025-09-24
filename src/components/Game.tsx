@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { GameState, DiceValue } from '@/types/game';
 import { generateLevel } from '@/utils/levelGenerator';
-import { createGameState, placeDice, undoLastMove, selectDice, getRunningTotals, validateGame } from '@/utils/gameLogic';
+import { createGameState, placeDice, undoLastMove, selectDice, getRunningTotals, validateGame, autoSolvePuzzle } from '@/utils/gameLogic';
 import GameGrid from './GameGrid';
 import DicePool from './DicePool';
 
@@ -84,6 +84,18 @@ const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) =>
     setGameState(newState);
   };
 
+  const handleAutoSolve = () => {
+    if (!gameState) return;
+    
+    const solvedState = autoSolvePuzzle(gameState);
+    if (solvedState) {
+      setGameState(solvedState);
+    } else {
+      // Show a message that no solution was found (shouldn't happen with our generator)
+      alert('No solution found! This puzzle may not be solvable.');
+    }
+  };
+
   const runningTotals = getRunningTotals(gameState);
 
   return (
@@ -116,6 +128,14 @@ const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) =>
             className="px-6 py-2 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             Undo ({gameState.undosRemaining} left)
+          </button>
+          
+          <button
+            onClick={handleAutoSolve}
+            disabled={gameState.gameStatus !== 'playing'}
+            className="px-6 py-2 bg-purple-500 text-white rounded-lg font-semibold hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+          >
+            Auto Solve
           </button>
           
           <div className="text-lg font-semibold text-gray-700">
@@ -152,6 +172,7 @@ const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) =>
             <p>3. You can go over target sums (they&apos;ll show in red)</p>
             <p>4. Win by matching all targets exactly with all dice used</p>
             <p>5. Use undo wisely - you only get 5 per level!</p>
+            <p>6. Stuck? Use the Auto Solve button for help!</p>
           </div>
         </div>
       </div>

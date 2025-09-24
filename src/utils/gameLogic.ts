@@ -179,3 +179,87 @@ export function selectDice(gameState: GameState, dice: DiceValue): GameState {
 export function getRunningTotals(gameState: GameState): RunningTotals {
   return calculateRunningTotals(gameState.grid);
 }
+
+/**
+ * Auto solves the puzzle using backtracking algorithm
+ */
+export function autoSolvePuzzle(gameState: GameState): GameState | null {
+  // Create a copy of the game state to work with
+  const workingState = JSON.parse(JSON.stringify(gameState)) as GameState;
+  
+  // Get all empty cells
+  const emptyCells: Array<{row: number, col: number}> = [];
+  for (let row = 0; row < workingState.level.size; row++) {
+    for (let col = 0; col < workingState.level.size; col++) {
+      if (!workingState.level.blocked[row][col] && workingState.grid[row][col] === null) {
+        emptyCells.push({row, col});
+      }
+    }
+  }
+  
+  // Get available dice values and their counts
+  const availableDice: DiceValue[] = [];
+  for (let value = 1; value <= 6; value++) {
+    const diceValue = value as DiceValue;
+    for (let i = 0; i < workingState.dicePool[diceValue]; i++) {
+      availableDice.push(diceValue);
+    }
+  }
+  
+  // Backtracking solver
+  function solve(cellIndex: number, remainingDice: DiceValue[]): boolean {
+    if (cellIndex >= emptyCells.length) {
+      // All cells filled, check if solution is valid
+      const validation = validateGame(workingState.grid, workingState.level);
+      return validation.isValid && validation.isComplete;
+    }
+    
+    const {row, col} = emptyCells[cellIndex];
+    
+    // Try each available dice
+    for (let i = 0; i < remainingDice.length; i++) {
+      const dice = remainingDice[i];
+      
+      // Place dice temporarily
+      workingState.grid[row][col] = dice;
+      
+      // Check if this placement is still valid (doesn't exceed targets)
+      const currentTotals = calculateRunningTotals(workingState.grid);
+      const rowValid = currentTotals.rows[row] <= workingState.level.targets.rows[row];
+      const colValid = currentTotals.cols[col] <= workingState.level.targets.cols[col];
+      
+      if (rowValid && colValid) {
+        // Create new remaining dice array without this dice
+        const newRemainingDice = [...remainingDice];
+        newRemainingDice.splice(i, 1);
+        
+        // Recursively solve the rest
+        if (solve(cellIndex + 1, newRemainingDice)) {
+          return true;
+        }
+      }
+      
+      // Backtrack
+      workingState.grid[row][col] = null;
+    }
+    
+    return false;
+  }
+  
+  // Attempt to solve
+  if (solve(0, availableDice)) {
+    // Update the original game state with the solution
+    const solvedState: GameState = {
+      ...gameState,
+      grid: workingState.grid,
+      dicePool: {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}, // All dice used
+      gameStatus: 'won',
+      selectedDice: null,
+      moveHistory: [] // Clear history since we auto-solved
+    };
+    
+    return solvedState;
+  }
+  
+  return null; // No solution found
+}
