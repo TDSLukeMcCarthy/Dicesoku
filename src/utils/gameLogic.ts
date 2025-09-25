@@ -16,7 +16,7 @@ export function createGameState(level: Level, currentLevel: number, gridSize: nu
     grid,
     dicePool: { ...level.dicePool },
     selectedDice: null,
-    undosRemaining: 5,
+    replacementsRemaining: 10,
     gameStatus: 'playing',
     moveHistory: []
   };
@@ -85,38 +85,69 @@ export function placeDice(
 }
 
 /**
- * Undoes the last move
+ * Moves a dice from one cell to another (costs a replacement token if moving from grid to grid)
  */
-export function undoLastMove(gameState: GameState): GameState {
-  if (gameState.undosRemaining <= 0 || gameState.moveHistory.length === 0) {
+export function moveDice(
+  gameState: GameState,
+  fromRow: number,
+  fromCol: number,
+  toRow: number,
+  toCol: number
+): GameState {
+  if (gameState.gameStatus !== 'playing') {
     return gameState;
   }
 
-  const lastMove = gameState.moveHistory[gameState.moveHistory.length - 1];
-  
-  // Create new grid with the dice removed
+  // Check if source cell has a dice
+  const diceValue = gameState.grid[fromRow][fromCol];
+  if (!diceValue) {
+    return gameState;
+  }
+
+  // Check if destination is valid
+  if (!isValidPlacement(
+    gameState.grid,
+    gameState.level.blocked,
+    gameState.level.targets,
+    toRow,
+    toCol,
+    diceValue
+  )) {
+    return gameState;
+  }
+
+  // Check if we have replacement tokens (only needed for grid-to-grid moves)
+  if (gameState.replacementsRemaining <= 0) {
+    // No more replacements - this causes a loss
+    return {
+      ...gameState,
+      gameStatus: 'lost'
+    };
+  }
+
+  // Create new grid with dice moved
   const newGrid = gameState.grid.map((row, i) =>
-    row.map((cell, j) => 
-      (i === lastMove.row && j === lastMove.col) ? null : cell
-    )
+    row.map((cell, j) => {
+      if (i === fromRow && j === fromCol) return null; // Remove from source
+      if (i === toRow && j === toCol) return diceValue; // Place at destination
+      return cell;
+    })
   );
 
-  // Return dice to pool
-  const newDicePool = {
-    ...gameState.dicePool,
-    [lastMove.dice]: gameState.dicePool[lastMove.dice] + 1
-  };
+  // Use a replacement token
+  const newReplacementsRemaining = gameState.replacementsRemaining - 1;
 
-  // Remove from move history
-  const newMoveHistory = gameState.moveHistory.slice(0, -1);
+  // Check win condition
+  const validation = validateGame(newGrid, gameState.level);
+  const allDiceUsed = Object.values(gameState.dicePool).every(count => count === 0);
+  const newGameStatus = validation.isComplete && validation.isValid && allDiceUsed ? 'won' : 'playing';
 
   return {
     ...gameState,
     grid: newGrid,
-    dicePool: newDicePool,
-    moveHistory: newMoveHistory,
-    undosRemaining: gameState.undosRemaining - 1,
-    gameStatus: 'playing' // Reset to playing state
+    replacementsRemaining: newReplacementsRemaining,
+    gameStatus: newGameStatus,
+    selectedDice: null
   };
 }
 
@@ -174,6 +205,21 @@ export function selectDice(gameState: GameState, dice: DiceValue): GameState {
 }
 
 /**
+ * Selects a dice from the grid for moving
+ */
+export function selectDiceFromGrid(gameState: GameState, row: number, col: number): GameState {
+  const diceValue = gameState.grid[row][col];
+  if (!diceValue || gameState.level.blocked[row][col]) {
+    return gameState;
+  }
+  
+  return {
+    ...gameState,
+    selectedDice: diceValue
+  };
+}
+
+/**
  * Gets running totals for display
  */
 export function getRunningTotals(gameState: GameState): RunningTotals {
@@ -181,73 +227,97 @@ export function getRunningTotals(gameState: GameState): RunningTotals {
 }
 
 /**
- * Auto solves the puzzle using backtracking algorithm
+ * Auto solves the puzzle using optimized backtracking algorithm
  */
 export function autoSolvePuzzle(gameState: GameState): GameState | null {
+  // For large grids, use a timeout to prevent crashes
+  const startTime = Date.now();
+  const maxTime = 10000; // 10 seconds max
+  
   // Create a copy of the game state to work with
   const workingState = JSON.parse(JSON.stringify(gameState)) as GameState;
   
-  // Get all empty cells
-  const emptyCells: Array<{row: number, col: number}> = [];
+  // First, check if the current state is already impossible
+  if (!isPuzzleViable(workingState)) {
+    return null;
+  }
+  
+  // Get all empty cells, sorted by constraint (most constrained first)
+  const emptyCells: Array<{row: number, col: number, possibleValues: DiceValue[]}> = [];
   for (let row = 0; row < workingState.level.size; row++) {
     for (let col = 0; col < workingState.level.size; col++) {
       if (!workingState.level.blocked[row][col] && workingState.grid[row][col] === null) {
-        emptyCells.push({row, col});
+        const possibleValues = getPossibleValues(workingState, row, col);
+        emptyCells.push({row, col, possibleValues});
       }
     }
   }
   
-  // Get available dice values and their counts
-  const availableDice: DiceValue[] = [];
-  for (let value = 1; value <= 6; value++) {
-    const diceValue = value as DiceValue;
-    for (let i = 0; i < workingState.dicePool[diceValue]; i++) {
-      availableDice.push(diceValue);
-    }
-  }
+  // Sort by number of possible values (most constrained first)
+  emptyCells.sort((a, b) => a.possibleValues.length - b.possibleValues.length);
   
-  // Backtracking solver
-  function solve(cellIndex: number, remainingDice: DiceValue[]): boolean {
+  // Convert dice pool to more efficient structure
+  const diceCounter: Record<DiceValue, number> = {...workingState.dicePool};
+  
+  // Optimized backtracking solver with better pruning
+  function solve(cellIndex: number): boolean {
+    // Check timeout
+    if (Date.now() - startTime > maxTime) {
+      return false;
+    }
+    
     if (cellIndex >= emptyCells.length) {
       // All cells filled, check if solution is valid
       const validation = validateGame(workingState.grid, workingState.level);
       return validation.isValid && validation.isComplete;
     }
     
-    const {row, col} = emptyCells[cellIndex];
+    const {row, col, possibleValues} = emptyCells[cellIndex];
     
-    // Try each available dice
-    for (let i = 0; i < remainingDice.length; i++) {
-      const dice = remainingDice[i];
+    // Recalculate possible values based on current state
+    const currentPossibleValues = possibleValues.filter(dice => {
+      if (diceCounter[dice] <= 0) return false;
       
+      // Check if placing this dice would violate constraints
+      const currentRowSum = calculateRowSum(workingState.grid, row);
+      const currentColSum = calculateColSum(workingState.grid, col);
+      const rowTarget = workingState.level.targets.rows[row];
+      const colTarget = workingState.level.targets.cols[col];
+      
+      return (currentRowSum + dice <= rowTarget) && (currentColSum + dice <= colTarget);
+    });
+    
+    // If no possible values, this branch is dead
+    if (currentPossibleValues.length === 0) {
+      return false;
+    }
+    
+    // Try dice values in order of scarcity (least available first)
+    currentPossibleValues.sort((a, b) => diceCounter[a] - diceCounter[b]);
+    
+    for (const dice of currentPossibleValues) {
       // Place dice temporarily
       workingState.grid[row][col] = dice;
+      diceCounter[dice]--;
       
-      // Check if this placement is still valid (doesn't exceed targets)
-      const currentTotals = calculateRunningTotals(workingState.grid);
-      const rowValid = currentTotals.rows[row] <= workingState.level.targets.rows[row];
-      const colValid = currentTotals.cols[col] <= workingState.level.targets.cols[col];
-      
-      if (rowValid && colValid) {
-        // Create new remaining dice array without this dice
-        const newRemainingDice = [...remainingDice];
-        newRemainingDice.splice(i, 1);
-        
+      // Check if this placement maintains puzzle viability
+      if (isPartialStateViable(workingState, diceCounter, emptyCells, cellIndex + 1)) {
         // Recursively solve the rest
-        if (solve(cellIndex + 1, newRemainingDice)) {
+        if (solve(cellIndex + 1)) {
           return true;
         }
       }
       
       // Backtrack
       workingState.grid[row][col] = null;
+      diceCounter[dice]++;
     }
     
     return false;
   }
   
   // Attempt to solve
-  if (solve(0, availableDice)) {
+  if (solve(0)) {
     // Update the original game state with the solution
     const solvedState: GameState = {
       ...gameState,
@@ -261,5 +331,131 @@ export function autoSolvePuzzle(gameState: GameState): GameState | null {
     return solvedState;
   }
   
-  return null; // No solution found
+  return null; // No solution found or timed out
+}
+
+// Helper function to check if the puzzle is viable from the start
+function isPuzzleViable(gameState: GameState): boolean {
+  // Basic check: do we have the right number of dice for empty cells?
+  let emptyCells = 0;
+  for (let row = 0; row < gameState.level.size; row++) {
+    for (let col = 0; col < gameState.level.size; col++) {
+      if (!gameState.level.blocked[row][col] && gameState.grid[row][col] === null) {
+        emptyCells++;
+      }
+    }
+  }
+  
+  const totalDice = Object.values(gameState.dicePool).reduce((sum, count) => sum + count, 0);
+  return totalDice === emptyCells;
+}
+
+// Helper function to get possible dice values for a cell
+function getPossibleValues(gameState: GameState, row: number, col: number): DiceValue[] {
+  const possibleValues: DiceValue[] = [];
+  const currentRowSum = calculateRowSum(gameState.grid, row);
+  const currentColSum = calculateColSum(gameState.grid, col);
+  const rowTarget = gameState.level.targets.rows[row];
+  const colTarget = gameState.level.targets.cols[col];
+  
+  for (let dice = 1; dice <= 6; dice++) {
+    const diceValue = dice as DiceValue;
+    if (gameState.dicePool[diceValue] > 0 && 
+        currentRowSum + dice <= rowTarget && 
+        currentColSum + dice <= colTarget) {
+      possibleValues.push(diceValue);
+    }
+  }
+  
+  return possibleValues;
+}
+
+// Enhanced viability check for partial states
+function isPartialStateViable(
+  workingState: GameState,
+  diceCounter: Record<DiceValue, number>,
+  emptyCells: Array<{row: number, col: number, possibleValues: DiceValue[]}>,
+  nextCellIndex: number
+): boolean {
+  // Quick check: do we have enough dice left?
+  const remainingCells = emptyCells.length - nextCellIndex;
+  const remainingDice = Object.values(diceCounter).reduce((sum, count) => sum + count, 0);
+  
+  if (remainingDice !== remainingCells) {
+    return false;
+  }
+  
+  // Check if any remaining cell has no possible values
+  for (let i = nextCellIndex; i < emptyCells.length; i++) {
+    const {row, col} = emptyCells[i];
+    const currentRowSum = calculateRowSum(workingState.grid, row);
+    const currentColSum = calculateColSum(workingState.grid, col);
+    const rowTarget = workingState.level.targets.rows[row];
+    const colTarget = workingState.level.targets.cols[col];
+    
+    let hasPossibleValue = false;
+    for (let dice = 1; dice <= 6; dice++) {
+      const diceValue = dice as DiceValue;
+      if (diceCounter[diceValue] > 0 && 
+          currentRowSum + dice <= rowTarget && 
+          currentColSum + dice <= colTarget) {
+        hasPossibleValue = true;
+        break;
+      }
+    }
+    
+    if (!hasPossibleValue) {
+      return false;
+    }
+  }
+  
+  // For larger grids, do a more thorough check
+  if (workingState.level.size <= 6) {
+    // Check if targets are still achievable
+    for (let row = 0; row < workingState.level.size; row++) {
+      const currentSum = calculateRowSum(workingState.grid, row);
+      const target = workingState.level.targets.rows[row];
+      const emptyCellsInRow = emptyCells.slice(nextCellIndex).filter(cell => cell.row === row).length;
+      
+      if (currentSum > target) {
+        return false;
+      }
+      
+      // Check if we can reach exactly the target
+      const minPossible = currentSum + emptyCellsInRow; // minimum with all 1s
+      const maxPossible = currentSum + (emptyCellsInRow * 6); // maximum with all 6s
+      
+      if (target < minPossible || target > maxPossible) {
+        return false;
+      }
+    }
+    
+    for (let col = 0; col < workingState.level.size; col++) {
+      const currentSum = calculateColSum(workingState.grid, col);
+      const target = workingState.level.targets.cols[col];
+      const emptyCellsInCol = emptyCells.slice(nextCellIndex).filter(cell => cell.col === col).length;
+      
+      if (currentSum > target) {
+        return false;
+      }
+      
+      // Check if we can reach exactly the target
+      const minPossible = currentSum + emptyCellsInCol; // minimum with all 1s
+      const maxPossible = currentSum + (emptyCellsInCol * 6); // maximum with all 6s
+      
+      if (target < minPossible || target > maxPossible) {
+        return false;
+      }
+    }
+  }
+  
+  return true;
+}
+
+function calculateRowSum(grid: (DiceValue | null)[][], row: number): number {
+  return grid[row].reduce((sum, cell) => sum + (cell || 0), 0);
+}
+
+function calculateColSum(grid: (DiceValue | null)[][], col: number): number {
+  return grid.reduce((sum, row) => sum + (row[col] || 0), 0);
 }

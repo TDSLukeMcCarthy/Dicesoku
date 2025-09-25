@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GameState, DiceValue } from '@/types/game';
 import { generateLevel } from '@/utils/levelGenerator';
-import { createGameState, placeDice, undoLastMove, selectDice, getRunningTotals, validateGame, autoSolvePuzzle } from '@/utils/gameLogic';
+import { createGameState, placeDice, moveDice, selectDice, selectDiceFromGrid, getRunningTotals, validateGame, autoSolvePuzzle } from '@/utils/gameLogic';
 import GameGrid from './GameGrid';
 import DicePool from './DicePool';
 
@@ -15,6 +15,8 @@ interface GameProps {
 
 const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) => {
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [selectedGridCell, setSelectedGridCell] = useState<{row: number, col: number} | null>(null);
+  const autoSolveButtonRef = useRef<HTMLButtonElement>(null);
 
   // Initialize game when level number or grid size changes
   useEffect(() => {
@@ -55,27 +57,53 @@ const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) =>
   }
 
   const handleCellClick = (row: number, col: number) => {
-    if (!gameState.selectedDice) {
+    if (!gameState) return;
+
+    const cellHasDice = gameState.grid[row][col] !== null;
+    const isBlocked = gameState.level.blocked[row][col];
+
+    // If clicking on a cell with a dice, select it for moving
+    if (cellHasDice && !isBlocked) {
+      setSelectedGridCell({row, col});
+      const newState = selectDiceFromGrid(gameState, row, col);
+      setGameState(newState);
       return;
     }
 
-    const newState = placeDice(gameState, row, col, gameState.selectedDice);
-    setGameState(newState);
+    // If we have a dice selected from the pool, place it
+    if (gameState.selectedDice && !selectedGridCell) {
+      const newState = placeDice(gameState, row, col, gameState.selectedDice);
+      setGameState(newState);
+      return;
+    }
+
+    // If we have a dice selected from the grid, move it
+    if (selectedGridCell && gameState.selectedDice) {
+      const newState = moveDice(gameState, selectedGridCell.row, selectedGridCell.col, row, col);
+      setGameState(newState);
+      setSelectedGridCell(null);
+      return;
+    }
   };
 
   const handleDiceSelect = (dice: DiceValue) => {
     const newState = selectDice(gameState, dice);
     setGameState(newState);
+    setSelectedGridCell(null); // Clear grid selection when selecting from pool
   };
 
-  const handleUndo = () => {
-    const newState = undoLastMove(gameState);
-    setGameState(newState);
-  };
 
-  const handleDrop = (row: number, col: number, dice: DiceValue) => {
-    const newState = placeDice(gameState, row, col, dice);
-    setGameState(newState);
+  const handleDrop = (row: number, col: number, dice: DiceValue, fromGrid?: {row: number, col: number}) => {
+    if (fromGrid) {
+      // Moving dice from grid to grid
+      const newState = moveDice(gameState, fromGrid.row, fromGrid.col, row, col);
+      setGameState(newState);
+      setSelectedGridCell(null);
+    } else {
+      // Placing dice from pool to grid
+      const newState = placeDice(gameState, row, col, dice);
+      setGameState(newState);
+    }
   };
 
   const handleDragStart = (dice: DiceValue) => {
@@ -84,16 +112,45 @@ const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) =>
     setGameState(newState);
   };
 
+  const handleGridDragStart = (row: number, col: number, dice: DiceValue) => {
+    // Select the dice from grid and track the source cell
+    setSelectedGridCell({row, col});
+    const newState = selectDiceFromGrid(gameState, row, col);
+    setGameState(newState);
+  };
+
   const handleAutoSolve = () => {
     if (!gameState) return;
     
-    const solvedState = autoSolvePuzzle(gameState);
-    if (solvedState) {
-      setGameState(solvedState);
-    } else {
-      // Show a message that no solution was found (shouldn't happen with our generator)
-      alert('No solution found! This puzzle may not be solvable.');
+    // Show loading state
+    const button = autoSolveButtonRef.current;
+    if (button) {
+      button.textContent = 'Solving...';
+      button.disabled = true;
     }
+    
+    // Use setTimeout to allow UI to update
+    setTimeout(() => {
+      const solvedState = autoSolvePuzzle(gameState);
+      
+      // Reset button
+      if (button) {
+        button.textContent = 'Auto Solve';
+        button.disabled = gameState.gameStatus !== 'playing';
+      }
+      
+      if (solvedState) {
+        setGameState(solvedState);
+      } else {
+        // Show appropriate message based on grid size
+        const gridSize = gameState.gridSize;
+        if (gridSize >= 8) {
+          alert('Auto solve timed out! Large grids with many blocked cells can be very complex. Try making some moves manually first.');
+        } else {
+          alert('No solution found! This puzzle may not be solvable with the current dice placement.');
+        }
+      }
+    }, 100);
   };
 
   const runningTotals = getRunningTotals(gameState);
@@ -115,22 +172,19 @@ const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) =>
           
           {gameState.gameStatus === 'lost' && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded text-lg font-semibold">
-              😞 Game Over! All dice used but targets not matched exactly.
+              😞 Game Over! {gameState.replacementsRemaining === 0 ? 'No replacement tokens left!' : 'All dice used but targets not matched exactly.'}
             </div>
           )}
         </div>
 
         {/* Game Controls */}
         <div className="flex justify-center items-center space-x-6">
-          <button
-            onClick={handleUndo}
-            disabled={gameState.undosRemaining <= 0 || gameState.moveHistory.length === 0}
-            className="px-6 py-2 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-          >
-            Undo ({gameState.undosRemaining} left)
-          </button>
+          <div className="text-lg font-semibold text-gray-700">
+            Replacements: {gameState.replacementsRemaining}
+          </div>
           
           <button
+            ref={autoSolveButtonRef}
             onClick={handleAutoSolve}
             disabled={gameState.gameStatus !== 'playing'}
             className="px-6 py-2 bg-purple-500 text-white rounded-lg font-semibold hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
@@ -150,6 +204,7 @@ const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) =>
             runningTotals={runningTotals}
             onCellClick={handleCellClick}
             onDrop={handleDrop}
+            onDragStart={handleGridDragStart}
           />
         </div>
 
@@ -169,10 +224,11 @@ const Game: React.FC<GameProps> = ({ levelNumber, gridSize, onGameComplete }) =>
           <div className="text-sm text-blue-700 space-y-1">
             <p>1. Select a dice from the pool or drag it to the grid</p>
             <p>2. Click on an empty cell or drop the dice to place it</p>
-            <p>3. You can go over target sums (they&apos;ll show in red)</p>
-            <p>4. Win by matching all targets exactly with all dice used</p>
-            <p>5. Use undo wisely - you only get 5 per level!</p>
-            <p>6. Stuck? Use the Auto Solve button for help!</p>
+            <p>3. Click on placed dice to select and move them</p>
+            <p>4. Moving dice costs replacement tokens (10 per level)</p>
+            <p>5. You can go over target sums (they&apos;ll show in red)</p>
+            <p>6. Win by matching all targets exactly with all dice used</p>
+            <p>7. Stuck? Use the Auto Solve button for help!</p>
           </div>
         </div>
       </div>

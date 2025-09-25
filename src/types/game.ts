@@ -17,7 +17,7 @@ export interface GameState {
   grid: (DiceValue | null)[][];
   dicePool: Record<DiceValue, number>;
   selectedDice: DiceValue | null;
-  undosRemaining: number;
+  replacementsRemaining: number;
   gameStatus: 'playing' | 'won' | 'lost';
   moveHistory: Array<{
     row: number;

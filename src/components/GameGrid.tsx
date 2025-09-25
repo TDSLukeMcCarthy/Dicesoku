@@ -6,12 +6,14 @@ interface GameGridProps {
   gameState: GameState;
   runningTotals: RunningTotals;
   onCellClick: (row: number, col: number) => void;
-  onDrop?: (row: number, col: number, dice: DiceValue) => void;
+  onDrop?: (row: number, col: number, dice: DiceValue, fromGrid?: {row: number, col: number}) => void;
+  onDragStart?: (row: number, col: number, dice: DiceValue) => void;
 }
 
-const GameGrid: React.FC<GameGridProps> = ({ gameState, runningTotals, onCellClick, onDrop }) => {
+const GameGrid: React.FC<GameGridProps> = ({ gameState, runningTotals, onCellClick, onDrop, onDragStart }) => {
   const { level, grid } = gameState;
   const [dragHoverCell, setDragHoverCell] = React.useState<{row: number, col: number} | null>(null);
+  const [dragFromGrid, setDragFromGrid] = React.useState<{row: number, col: number} | null>(null);
   
   const getCellClasses = (row: number, col: number) => {
     // Dynamic sizing based on grid size
@@ -75,9 +77,45 @@ const GameGrid: React.FC<GameGridProps> = ({ gameState, runningTotals, onCellCli
     setDragHoverCell(null);
     
     const diceValue = parseInt(e.dataTransfer.getData('text/plain')) as DiceValue;
+    const fromGridData = e.dataTransfer.getData('fromGrid');
+    
     if (diceValue && onDrop) {
-      onDrop(row, col, diceValue);
+      const fromGrid = fromGridData ? JSON.parse(fromGridData) : undefined;
+      onDrop(row, col, diceValue, fromGrid);
     }
+    
+    setDragFromGrid(null);
+  };
+
+  const handleCellDragStart = (e: React.DragEvent, row: number, col: number) => {
+    const diceValue = grid[row][col];
+    if (!diceValue || level.blocked[row][col]) {
+      e.preventDefault();
+      return;
+    }
+
+    e.dataTransfer.setData('text/plain', diceValue.toString());
+    e.dataTransfer.setData('fromGrid', JSON.stringify({row, col}));
+    e.dataTransfer.effectAllowed = 'move';
+    
+    setDragFromGrid({row, col});
+    
+    // Visual feedback during drag
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5';
+    }
+    
+    if (onDragStart) {
+      onDragStart(row, col, diceValue);
+    }
+  };
+
+  const handleCellDragEnd = (e: React.DragEvent) => {
+    // Reset visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+    }
+    setDragFromGrid(null);
   };
 
   return (
@@ -128,7 +166,10 @@ const GameGrid: React.FC<GameGridProps> = ({ gameState, runningTotals, onCellCli
               <div
                 key={`${rowIndex}-${colIndex}`}
                 className={getCellClasses(rowIndex, colIndex)}
+                draggable={!level.blocked[rowIndex][colIndex] && cell !== null}
                 onClick={() => onCellClick(rowIndex, colIndex)}
+                onDragStart={(e) => handleCellDragStart(e, rowIndex, colIndex)}
+                onDragEnd={handleCellDragEnd}
                 onDragOver={handleDragOver}
                 onDragEnter={(e) => handleDragEnter(e, rowIndex, colIndex)}
                 onDragLeave={handleDragLeave}
