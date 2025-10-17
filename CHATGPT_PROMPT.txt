@@ -1,0 +1,225 @@
+You are a technical game specification expert. Based on the game concept we discussed, generate a comprehensive, highly detailed prompt for Cursor AI (Claude) that will enable one-shot implementation of the game.
+
+The generated Cursor prompt must follow this exact structure and tech stack:
+
+=== TECH STACK (Required) ===
+- Next.js 15+ (App Router)
+- TypeScript (strict typing)
+- Tailwind CSS 4 (styling and responsive design)
+- Shadcn UI (buttons, dialogs, cards)
+- Lucide Icons (all icons)
+- Framer Motion (animations)
+- Vercel ready (deployment)
+
+**Important:** Keep all code client-side compatible (avoid Node.js-specific APIs in components) to allow for future Capacitor.js integration if the prototype is successful.
+
+=== PROJECT STRUCTURE (Required) ===
+```
+/src
+  /app
+    - page.tsx (main orchestrator: manages screen navigation, localStorage, state)
+    - layout.tsx
+    - globals.css
+  /components
+    - Lobby.tsx (settings, play button, progress display, rules)
+    - Game.tsx (main game controller, state management, win/loss logic)
+    - [GameSpecific components - e.g., Grid, Board, Cards, etc.]
+  /types
+    - game.ts (all TypeScript interfaces)
+  /utils
+    - gameLogic.ts (core mechanics: createGameState, validate, checkWin, etc.)
+    - levelGenerator.ts (if needed for procedural levels)
+```
+
+=== COMPONENT PATTERN (Required) ===
+
+1. **page.tsx Pattern:**
+   - State: currentScreen ('lobby' | 'game'), level, settings
+   - LocalStorage: save/load progress and preferences
+   - Screen navigation handlers
+   - "Back to Lobby" button when in game
+
+2. **Lobby.tsx Pattern:**
+   - Game title with emoji/icon
+   - Progress display (current level, stats)
+   - Settings/toggles specific to game
+   - Difficulty selector (if applicable)
+   - Large "Play" button
+   - "How to Play" section
+   - Modern gradient background
+
+3. **Game.tsx Pattern:**
+   - Initialize level with useEffect
+   - Manage GameState
+   - Win/loss detection
+   - Stats display (moves, score, time, etc.)
+   - Game-specific controls
+   - Visual feedback for game status
+   - Auto return to lobby on completion
+
+=== REQUIRED IN CURSOR PROMPT ===
+
+Generate a Cursor prompt that includes:
+
+**1. GAME OVERVIEW**
+   - Name and concept
+   - How to play (step by step)
+   - Win condition
+   - Loss condition
+   - Key mechanics
+
+**2. TYPE DEFINITIONS (src/types/game.ts)**
+   - All enums and type aliases
+   - Level interface (configuration for each level)
+   - GameState interface (complete game state including level, status, score, etc.)
+   - Any other game-specific types
+   - ValidationResult or similar for game rules
+
+**3. GAME LOGIC FUNCTIONS (src/utils/gameLogic.ts)**
+   List each function with clear purpose:
+   - createGameState(level, levelNumber, ...): GameState
+   - [performAction](gameState, ...): GameState (for each game action)
+   - validateGame(gameState): ValidationResult
+   - checkWinCondition(gameState): boolean
+   - checkLossCondition(gameState): boolean
+   - Other helper functions
+
+**4. LEVEL GENERATOR (if needed)**
+   - When: Does the game need procedural generation?
+   - Algorithm: How are levels created?
+   - Validation: How to ensure levels are solvable?
+   - Difficulty: How does it scale?
+   - Specify function: generateLevel(difficulty, ...): Level
+
+**5. COMPONENT SPECIFICATIONS**
+   For each component beyond Lobby and Game:
+   - Component name and purpose
+   - Props interface
+   - Visual appearance
+   - Interaction methods (click, drag, hover)
+   - Animations needed
+   - Responsive behavior
+
+**6. STYLING & VISUAL DESIGN**
+   - Color scheme (primary, secondary, accent)
+   - Component styling patterns
+   - Animation triggers and effects
+   - Responsive breakpoints
+   - Visual feedback for states
+
+**7. GAME-SPECIFIC MECHANICS**
+   Detail unique features:
+   - Input methods (touch, drag, click, keyboard)
+   - Special rules or abilities
+   - Scoring/points system
+   - Timer mechanics (if any)
+   - Undo/redo (if needed)
+   - Hints or auto-solve (if applicable)
+
+**8. PROGRESSION & PERSISTENCE**
+   - How levels advance
+   - What saves to localStorage
+   - How difficulty increases
+   - Reset functionality
+
+**9. POLISH REQUIREMENTS**
+   - Loading states
+   - Success/failure animations
+   - Transitions between screens
+   - Tooltips or help text
+   - Celebration effects
+
+**10. EDGE CASES & VALIDATION**
+   - Invalid move prevention
+   - Boundary conditions
+   - Error states
+   - Performance considerations
+
+=== OUTPUT FORMAT ===
+
+Generate a single, complete Cursor prompt that starts like:
+
+"Create a fully functional [GAME NAME] game using Next.js, TypeScript, and Tailwind CSS.
+
+## Game Concept
+[Clear, detailed description]
+
+## Technical Stack
+[List the required tech stack]
+
+## Project Structure
+[Show exact folder structure]
+
+## Complete Implementation
+
+### 1. Type Definitions (src/types/game.ts)
+```typescript
+[Complete type definitions]
+```
+
+### 2. Game Logic (src/utils/gameLogic.ts)
+[Function descriptions and signatures]
+
+### 3. Level Generator (src/utils/levelGenerator.ts) [if needed]
+[Generation logic requirements]
+
+### 4. Main Page (src/app/page.tsx)
+[Detailed implementation requirements]
+
+### 5. Lobby Component (src/components/Lobby.tsx)
+[Detailed requirements with UI specifications]
+
+### 6. Game Component (src/components/Game.tsx)
+[Detailed requirements with state management]
+
+### 7. Additional Components
+[Each component with full specifications]
+
+### 8. Styling Guidelines
+[Visual design details]
+
+### 9. Game Mechanics Implementation
+[Step-by-step mechanic descriptions]
+
+### 10. Win/Loss Logic
+[Exact conditions]
+
+## Success Criteria
+- Fully playable game
+- All mechanics functional
+- Polished UI with animations
+- LocalStorage persistence
+- Mobile responsive (works great on phones/tablets in browser)
+- Vercel deployable
+- Clean, maintainable code
+
+## Future Enhancement (Do NOT implement now)
+After the web prototype is complete and tested, Capacitor.js can be added to build native APKs for Android/iOS. For now, focus on making an excellent web experience that works perfectly on mobile browsers.
+
+Please implement this complete game, ensuring all components integrate seamlessly."
+
+=== ADDITIONAL CONSIDERATIONS ===
+
+**Mobile-First Design:** Even though we're building for web initially, design should be mobile-first and touch-friendly. Test interactions work well on touch screens.
+
+**Performance:** Keep bundle size reasonable, optimize animations, lazy load if needed.
+
+**Browser Compatibility:** Ensure it works on modern mobile browsers (Safari iOS, Chrome Android).
+
+=== YOUR TASK ===
+
+Based on our previous conversation about the game concept, generate the complete Cursor prompt following the structure above. Be extremely detailed and specific so that Claude can implement the entire game in one shot without needing clarifications.
+
+Include:
+✓ Every type definition needed
+✓ Every function signature with clear descriptions
+✓ Every component with exact specifications
+✓ All game rules and mechanics
+✓ All UI/UX requirements
+✓ Specific styling guidelines
+✓ Edge cases and validations
+✓ Mobile-responsive design patterns
+✓ Touch and click interaction handling
+
+Make the prompt comprehensive enough that a developer could implement it without asking questions.
+
